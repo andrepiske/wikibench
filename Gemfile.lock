@@ -1,0 +1,33 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    concurrent-ruby (1.1.8)
+    concurrent-ruby-ext (1.1.8)
+      concurrent-ruby (= 1.1.8)
+    msgpack (1.4.2)
+    msgpack (1.4.2-java)
+    nokogiri (1.11.7-java)
+      racc (~> 1.4)
+    nokogiri (1.11.7-x86_64-darwin)
+      racc (~> 1.4)
+    pg (1.2.3)
+    racc (1.5.2)
+    racc (1.5.2-java)
+    redis (4.2.5)
+    sequel (5.45.0)
+
+PLATFORMS
+  universal-java-11
+  x86_64-darwin-20
+
+DEPENDENCIES
+  concurrent-ruby
+  concurrent-ruby-ext
+  msgpack
+  nokogiri
+  pg
+  redis
+  sequel
+
+BUNDLED WITH
+   2.2.19
