@@ -9,6 +9,7 @@ gem "msgpack"
 gem "bzip2-ffi"
 
 gem "arraybuffer"
+gem "slop"
 
 gem "pg"
 gem "sequel"

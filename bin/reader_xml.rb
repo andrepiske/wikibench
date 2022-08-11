@@ -1,105 +1,20 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
-$:.unshift(File.expand_path("./lib", __dir__))
+$:.unshift(File.expand_path("../lib", __dir__))
+require "xx"
+require "slop"
 
-require "bzip2/ffi"
-# require "pg"
-# require "sequel"
-require "nokogiri"
-require "osto"
-require "concurrent"
-# require "zlib"
-# require "pry"
-# require "pry-byebug"
-
-# require "redis"
-require "msgpack"
-
-require_relative './bit_encoder'
-require_relative './bin_writer'
-require_relative './models'
-
-class Worker
-  def initialize(q)
-    @q = q
-    # @driver = :redis; @redis_conn = Redis.new(url: "redis://127.0.0.1:7222/1")
-    # @driver = :redis; @redis_conn = Redis.new(url: "redis://192.168.1.192:7222/1")
-    # @driver = :postgres ; @pg_conn = Sequel.connect("postgres://postgres:root1337@127.0.0.1:7111/postgres")
-    # @driver = :postgres ; @pg_conn = Sequel.connect("postgres://postgres:root1337@192.168.1.192:7111/postgres")
-    @drive = :postgres ; @pg_conn = Sequel.connect("postgres://wiki_app_usr:supersafe@192.168.1.192:5432/wiki_app")
-  end
-
-  def run_forever
-    loop do
-      data = @q.pop
-      if data == nil
-        sleep(0.1)
-      else
-        process_one(data)
-      end
-    end
-  end
-
-  def process_one(pg_content)
-    # @pg_conn[:wiki_pages].insert(pg_content)
-    case @driver
-    when :redis
-      rev_id = pg_content[:revision_id]
-      data = MessagePack.pack(pg_content)
-      @redis_conn.set("r:#{rev_id}", data)
-    when :postgres
-      @pg_conn[:wiki_pages].insert(pg_content)
-    else
-      raise "Invalid driver: #{@driver}"
-    end
-  end
-end
-
-class DbWriter
-  def initialize(worker_count)
-    # @worker_count = worker_count
-    # @queue = Concurrent::Array.new
-    # @sem = Concurrent::Semaphore.new(worker_count)
-    # @sem.acquire(worker_count)
-    @bin_writer = BinWriter.new("/Volumes/Bento/pages")
-  end
-
-  def insert(data)
-    # @queue << data
-    # puts("insert #{data}")
-
-    @bin_writer.write_single(data)
-  end
-
-  def queue_size
-    1
-    # @queue.length
-  end
-
-  def start
-    # @threads = (0...@worker_count).map do |index|
-    #   Thread.new { w = Worker.new(@queue) ; w.run_forever }
-    # end
-  end
-end
-
-# CREATE TABLE wiki_pages (
-#   page_id INTEGER PRIMARY KEY,
-#   revision_id INTEGER,
-#   parent_id INTEGER,
-#   ts TIMESTAMP WITHOUT TIME ZONE,
-#   sha1 TEXT,
-#   is_redirect BOOLEAN NOT NULL,
-#   revision_text TEXT
-# );
-#
 class WikiDoc < Nokogiri::XML::SAX::Document
   def initialize(*a)
+    @options = a.shift
     super(*a)
     @node_state = []
     @state_stack = []
-    @writer = DbWriter.new(72)
-    # @writer.start
+    @bin_writer = BinWriter.new(@options[:out_dir])
+  end
+
+  def finish_bin_writer
+    @bin_writer.flush
   end
 
   def state
@@ -158,17 +73,6 @@ class WikiDoc < Nokogiri::XML::SAX::Document
     @num_pages += 1
     @cyc_pages += 1
 
-    # qs = @writer.queue_size
-    # if qs > 10000
-    #   print("Queue too large (#{qs}), throttling ")
-    #
-    #   while @writer.queue_size > 5000
-    #     print(".")
-    #     sleep(0.2)
-    #   end
-    #   puts("")
-    # end
-
     # if @num_pages % 1000 == 0
       time_now = Time.now.to_f * 1000.0
       if @last_ts
@@ -177,7 +81,7 @@ class WikiDoc < Nokogiri::XML::SAX::Document
           pages_ps = 1000.0 * @cyc_pages / diff
           tot_ps = 1000.0 * @num_pages / (time_now - @first_page_ts)
 
-          puts("%.2f pages per second (%.2f total) %06dp [q=%d]" % [pages_ps, tot_ps, @num_pages, @writer.queue_size])
+          puts("%.2f pages per second (%.2f total) %06dp" % [pages_ps, tot_ps, @num_pages])
 
           @cyc_pages = 0
           @last_ts = time_now
@@ -199,18 +103,17 @@ class WikiDoc < Nokogiri::XML::SAX::Document
       # puts "#{prefix}got a page: #{page.title}"
 
       rev = page.revisions.first
-      pg_content = {
-        page_id: page.id,
-        revision_id: rev.id,
-        parent_id: rev.parentid,
-        ts: rev.timestamp,
-        sha1: rev.sha1,
-        is_redirect: !!page.is_redirect,
-        revision_text: rev.text
-      }
-      # require "pry"; require "pry-byebug"; binding.pry
-      #
-      @writer.insert(pg_content)
+      # pg_content = {
+      #   page_id: page.id,
+      #   revision_id: rev.id,
+      #   parent_id: rev.parentid,
+      #   ts: rev.timestamp,
+      #   sha1: rev.sha1,
+      #   is_redirect: !!page.is_redirect,
+      #   revision_text: rev.text
+      # }
+
+      @bin_writer.write_single(page, rev)
     end
   end
 
@@ -271,6 +174,13 @@ class WikiDoc < Nokogiri::XML::SAX::Document
   end
 end
 
-parser = Nokogiri::XML::SAX::Parser.new(WikiDoc.new)
+options = Slop.parse do |o|
+  o.string "--input", "Input XML file (.xml.bz2 file)", required: true
+  o.string "--out-dir", "Output directory for binary files", required: true
+end
+
+wiki_doc = WikiDoc.new(options)
+parser = Nokogiri::XML::SAX::Parser.new(wiki_doc)
 puts "will start parsing"
-parser.parse(Bzip2::FFI::Reader.open("/Volumes/Bento/enwiki-20220520-pages-articles.xml.bz2"))
+parser.parse(Bzip2::FFI::Reader.open(options[:input]))
+wiki_doc.finish_bin_writer

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "stringio"
-
 class BinDecoder
   def initialize(io)
     @io = io
@@ -59,7 +57,9 @@ class BinReader
 
     blob = {}
     dec = BinDecoder.new(@data)
+
     blob[:page_id] = dec.read_int64
+    blob[:title] = dec.read_string
     blob[:revision_id] = dec.read_int64
     blob[:parent_id] = dec.read_int64
     blob[:ts] = dec.read_int64

@@ -1,18 +1,17 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-$:.unshift(File.expand_path("./lib", __dir__))
-
-require "time"
-require "date"
-require "zlib"
-require "osto"
-require_relative './models'
-require_relative './bin_reader'
+$:.unshift(File.expand_path("../lib", __dir__))
+require "xx"
+require "slop"
 
 class ReaderBin
-  def initialize(files_path)
-    @files_path = files_path
+  def initialize
+    @options = Slop.parse do |o|
+      o.string "--path", "Input folder", required: true
+    end
+
+    @files_path = @options[:path]
   end
 
   def run
@@ -57,4 +56,4 @@ class ReaderBin
 end
 
 puts "will start reading"
-ReaderBin.new("/Volumes/Bento/pages").run
+ReaderBin.new.run

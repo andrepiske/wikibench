@@ -35,7 +35,7 @@ class BinEncoder
 
   def write_string(value)
     if value == nil
-      @io.write("\x00".b)
+      @io.write("\xFF\xFF\xFF\xFF".b)
       return
     end
 
@@ -55,22 +55,23 @@ class BinWriter
     @file_no = 1
   end
 
-  def write_single(data)
+  def flush
+    close_and_flush_block(true)
+  end
+
+  def write_single(page, rev)
     ensure_buffer!
 
     @buffer.write_byte(0xDD) # page / article
 
-    # if data[:is_redirect]
-    #   require "pry"; require "pry-byebug"; binding.pry
-    # end
-
-    @buffer.write_int64( data[:page_id] )
-    @buffer.write_int64( data[:revision_id] )
-    @buffer.write_int64( data[:parent_id] || -1 )
-    @buffer.write_int64( data[:ts].utc.to_i )
-    @buffer.write_string( data[:sha1] )
-    @buffer.write_string( data[:revision_text] )
-    @buffer.write_byte( data[:is_redirect] ? 1 : 0 )
+    @buffer.write_int64(page.id)
+    @buffer.write_string(page.title)
+    @buffer.write_int64(rev.id)
+    @buffer.write_int64(rev.parentid || -1)
+    @buffer.write_int64(rev.timestamp.utc.to_i)
+    @buffer.write_string(rev.sha1)
+    @buffer.write_string(rev.text)
+    @buffer.write_byte(page.is_redirect ? 1 : 0)
 
     # @buffer.write_byte(0xDD) # page / article
     # @buffer.write_prefixed_int( data[:page_id] , 7)
@@ -84,8 +85,6 @@ class BinWriter
     @pages_in_block += 1
 
     close_and_flush_block
-
-    # require "pry"; require "pry-byebug"; binding.pry
   end
 
   private
