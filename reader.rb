@@ -2,8 +2,9 @@
 # frozen_string_literal: true
 $:.unshift(File.expand_path("./lib", __dir__))
 
-require "pg"
-require "sequel"
+require "bzip2/ffi"
+# require "pg"
+# require "sequel"
 require "nokogiri"
 require "osto"
 require "concurrent"
@@ -11,23 +12,12 @@ require "concurrent"
 # require "pry"
 # require "pry-byebug"
 
-require "redis"
+# require "redis"
 require "msgpack"
 
-class PageRevision < Osto::Model
-  col :id, :integer
-  col :parentid, :integer
-  col :timestamp, :timestamp
-  col :sha1, :string
-  col :text, :string
-end
-
-class WikiPage < Osto::Model
-  col :title, :string
-  col :id, :integer
-  col :is_redirect, :boolean
-  col :revisions, :array
-end
+require_relative './bit_encoder'
+require_relative './bin_writer'
+require_relative './models'
 
 class Worker
   def initialize(q)
@@ -36,7 +26,7 @@ class Worker
     # @driver = :redis; @redis_conn = Redis.new(url: "redis://192.168.1.192:7222/1")
     # @driver = :postgres ; @pg_conn = Sequel.connect("postgres://postgres:root1337@127.0.0.1:7111/postgres")
     # @driver = :postgres ; @pg_conn = Sequel.connect("postgres://postgres:root1337@192.168.1.192:7111/postgres")
-    @driver = :postgres ; @pg_conn = Sequel.connect("postgres://wiki_app_usr:supersafe@192.168.1.192:5432/wiki_app")
+    @drive = :postgres ; @pg_conn = Sequel.connect("postgres://wiki_app_usr:supersafe@192.168.1.192:5432/wiki_app")
   end
 
   def run_forever
@@ -67,24 +57,29 @@ end
 
 class DbWriter
   def initialize(worker_count)
-    @worker_count = worker_count
-    @queue = Concurrent::Array.new
+    # @worker_count = worker_count
+    # @queue = Concurrent::Array.new
     # @sem = Concurrent::Semaphore.new(worker_count)
     # @sem.acquire(worker_count)
+    @bin_writer = BinWriter.new("/Volumes/Bento/pages")
   end
 
   def insert(data)
-    @queue << data
+    # @queue << data
+    # puts("insert #{data}")
+
+    @bin_writer.write_single(data)
   end
 
   def queue_size
-    @queue.length
+    1
+    # @queue.length
   end
 
   def start
-    @threads = (0...@worker_count).map do |index|
-      Thread.new { w = Worker.new(@queue) ; w.run_forever }
-    end
+    # @threads = (0...@worker_count).map do |index|
+    #   Thread.new { w = Worker.new(@queue) ; w.run_forever }
+    # end
   end
 end
 
@@ -163,16 +158,16 @@ class WikiDoc < Nokogiri::XML::SAX::Document
     @num_pages += 1
     @cyc_pages += 1
 
-    qs = @writer.queue_size
-    if qs > 10000
-      print("Queue too large (#{qs}), throttling ")
-
-      while @writer.queue_size > 5000
-        print(".")
-        sleep(0.2)
-      end
-      puts("")
-    end
+    # qs = @writer.queue_size
+    # if qs > 10000
+    #   print("Queue too large (#{qs}), throttling ")
+    #
+    #   while @writer.queue_size > 5000
+    #     print(".")
+    #     sleep(0.2)
+    #   end
+    #   puts("")
+    # end
 
     # if @num_pages % 1000 == 0
       time_now = Time.now.to_f * 1000.0
@@ -213,8 +208,9 @@ class WikiDoc < Nokogiri::XML::SAX::Document
         is_redirect: !!page.is_redirect,
         revision_text: rev.text
       }
-
-      # @writer.insert(pg_content)
+      # require "pry"; require "pry-byebug"; binding.pry
+      #
+      @writer.insert(pg_content)
     end
   end
 
@@ -277,4 +273,4 @@ end
 
 parser = Nokogiri::XML::SAX::Parser.new(WikiDoc.new)
 puts "will start parsing"
-parser.parse(File.open("/Volumes/AndreSG/enwiki-20190720-pages-articles.xml"))
+parser.parse(Bzip2::FFI::Reader.open("/Volumes/Bento/enwiki-20220520-pages-articles.xml.bz2"))
