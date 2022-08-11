@@ -8,7 +8,8 @@ CREATE TABLE wiki_pages (
  ts TIMESTAMP WITHOUT TIME ZONE,
  sha1 TEXT,
  is_redirect BOOLEAN NOT NULL,
- revision_text TEXT
+ revision_text TEXT,
+ title TEXT
 );
 
 ```

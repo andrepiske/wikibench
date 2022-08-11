@@ -9,13 +9,20 @@ class ReaderBin
   def initialize
     @options = Slop.parse do |o|
       o.string "--path", "Input folder", required: true
+      o.string "--db-url", "DB URL", required: true
+      o.string "--log", "Log output file"
+      o.string "-w", "--workers", "Number of workers", default: 2
     end
 
     @files_path = @options[:path]
+    data_logger = DataLogger.new(@options[:log])
+    @db_writer = DbWriter.new(@options[:workers].to_i, @options[:db_url], data_logger)
   end
 
   def run
     load_file_list
+
+    @db_writer.start
 
     @file_list.each do |file_name|
       load_single_file(File.join(@files_path, file_name))
@@ -32,6 +39,7 @@ class ReaderBin
 
     File.open(full_path) do |file|
       BinReader.new(file).read_all do |page|
+        @db_writer.insert(page)
         pages += 1
       end
     end
